@@ -151,6 +151,7 @@ See [Queueification](#queueification) above.
 Creates a new PromiseQueue instance.
 
 **Options:**
+
 | Property             | Type     | Default     | Description |
 | -------------------- | -------- | ----------- | ----------- |
 | lifo                 | boolean  | `false`     | If `true`, the queue will operate in LIFO mode (rather than the default FIFO mode). This makes the queue operate like a stack. |
@@ -177,6 +178,7 @@ Adds an item to the queue for deferred processing and returns a Promise that res
 once the function has been dequeued and executed to completion.
 
 **Options:**
+
 | Property             | Type     | Default     | Description |
 | -------------------- | -------- | ----------- | ----------- |
 | args                 | Array    | []          | An array of arguments to invoke the enqueued function with. **This must be an array.** |

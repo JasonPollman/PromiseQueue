@@ -1,0 +1,30 @@
+{
+  "sourceMaps": true,
+  "compact": "auto",
+  "minified": true,
+  "retainLines": false,
+  "comments": false,
+  "presets": [
+    "stage-0",
+    [
+      "env",
+      {
+        "node": "4.0.0",
+        "browsers": ["last 2 versions", "ie 11"]
+      }
+    ]
+  ],
+  "plugins": [
+    "transform-class-properties",
+    "transform-es2015-modules-umd"
+  ],
+  "env": {
+    "test": {
+      "retainLines": true,
+      "plugins": ["istanbul"]
+    },
+    "production": {
+      "presets": ["minify"]
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "name": "@jasonpollman/promise-queue",
+  "version": "1.0.0",
+  "description": "A queue, for promises.",
+  "license": "ISC",
+  "main": "index.js",
+  "keywords": [
+    "queue",
+    "promise queue",
+    "priority queue",
+    "lifo",
+    "fifo"
+  ],
+  "author": {
+    "name": "Jason James Pollman",
+    "email": "jasonjpollman@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JasonPollman/PromiseQueue.git"
+  },
+  "scripts": {
+    "test": "NODE_ENV=test mocha ./test",
+    "test:cover": "NODE_ENV=test nyc mocha",
+    "compile": "NODE_ENV=production ./node_modules/.bin/babel ./src -d ./dist --copy-files --source-maps",
+    "prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-core": "^6.26.0",
+    "babel-eslint": "^8.2.2",
+    "babel-plugin-istanbul": "^4.1.5",
+    "babel-plugin-transform-es2015-modules-umd": "^6.24.1",
+    "babel-preset-env": "^1.6.1",
+    "babel-preset-minify": "^0.3.0",
+    "babel-preset-stage-0": "^6.24.1",
+    "babel-register": "^6.26.0",
+    "babel-runtime": "^6.26.0",
+    "chai": "^4.1.2",
+    "eslint": "^4.18.2",
+    "eslint-config-airbnb": "^16.1.0",
+    "eslint-plugin-import": "^2.9.0",
+    "eslint-plugin-jsx-a11y": "^6.0.3",
+    "eslint-plugin-react": "^7.7.0",
+    "mocha": "^5.0.4",
+    "nyc": "^11.6.0"
+  },
+  "nyc": {
+    "sourceMap": false,
+    "instrument": false,
+    "check-coverage": true,
+    "lines": 99,
+    "statements": 99,
+    "functions": 99,
+    "branches": 99,
+    "reporter": [
+      "lcov",
+      "text-summary"
+    ]
+  }
+}

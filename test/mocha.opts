@@ -1,0 +1,3 @@
+--require babel-register
+--slow 750
+--ui bdd

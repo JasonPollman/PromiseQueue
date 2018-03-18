@@ -1,6 +1,6 @@
 import { expect } from 'chai';
 import { exec } from 'child_process';
-import PromiseQueue from '../dist/PromiseQueue';
+import PromiseQueue from '../src/PromiseQueue';
 
 const execAsync = (...args) => new Promise((resolve, reject) => (
   exec(...args, (err, results) => (err ? reject(err) : resolve(results)))

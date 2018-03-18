@@ -12,22 +12,23 @@
  */
 
 /**
- * "Queue ID". An incrementer. Each new PromiseQueue gets a unique id.
- * @type {number}
+ * Assigned to every promise returned from PromiseQueue#enqueue
+ * to ensure the user isn't returning another qneueued promise.
+ * @type {string}
  */
-let qid = 0;
+const IS_PROMISE_QUEUE_PROMISE = '__IS_PROMISE_QUEUE_PROMISE__';
 
 /**
  * The properties picked from each enqueued item when
- * passed to the user's custom `handleQueueReduction` method.
+ * passed to user methods (for encapsulation and to prevent mutation).
  * @type {Array<string>}
  */
 const PICK_FROM_ENQUEUED = ['args', 'method', 'priority', 'context'];
 
 /**
  * Native prototype properties.
- * This is the set of own properties which we don't want to queueify
- * when running `queueifyAll` on an object.
+ * This is the set of prototypes which we don't want to queueify when running
+ * `queueifyAll` on an object and walking it's prototype chain.
  * @type {Array<object>}
  */
 const NATIVE_PROTOTYPES = [
@@ -47,20 +48,41 @@ const NATIVE_PROTOTYPES = [
 const capitalize = s => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
- * Used by Array#sort to sort queues by priority.
- * @param {object} a The first queue item to compare.
- * @param {object} b The first queue item to compare.
- * @returns {number} A sort result value.
- */
-const prioritySort = (a, b) => Number(b.priority) - Number(a.priority);
-
-/**
  * Invokes the given array of functions with the given array of arguments.
  * @param {Array<function>} methods An array of methods to invoke.
  * @param {Array} args The arguments to invoke the method with.
  * @returns {undefined}
  */
 const invokeAllWithArguments = (methods, args) => methods.forEach(method => method(...args));
+
+/**
+ * Curried version of `invokeAllWithArguments`.
+ * @param {Array<function>} methods An array of methods to invoke.
+ * @returns {undefined}
+ */
+const invokerOfAllWithArguments = methods => (...args) => invokeAllWithArguments(methods, args);
+
+/**
+ * Returns a function used by Array#sort to sort queues by priority in fifo mode.
+ * @param {Array} deprioritized Collects deprioritized enqueued items.
+ * @returns {number} A sort result value.
+ */
+const prioritySortFIFO = deprioritized => (a, b) => {
+  const difference = Number(b.priority) - Number(a.priority);
+  if (difference > 0 && deprioritized.indexOf(a) === -1) deprioritized.push(a);
+  return difference;
+};
+
+/**
+ * Returns a function used by Array#sort to sort queues by priority in lifo mode.
+ * @param {Array} deprioritized Collects deprioritized enqueued items.
+ * @returns {number} A sort result value.
+ */
+const prioritySortLIFO = deprioritized => (a, b) => {
+  const difference = Number(a.priority) - Number(b.priority);
+  if (difference < 0 && deprioritized.indexOf(a) === -1) deprioritized.push(a);
+  return difference;
+};
 
 /**
  * Similar to Array#findIndex (which is unsupported by IE).
@@ -93,6 +115,7 @@ function pick(source, properties) {
 }
 
 /**
+ * Returns the function name for a queueified method (using prefix and suffix).
  * @param {string} methodName The name of the method to get the queueify key of.
  * @param {string} prefix The key prefix.
  * @param {string} suffix The key suffix.
@@ -108,10 +131,11 @@ function keyForQueueifiedMethod(methodName, prefix, suffix) {
  * @returns {object} The exportable queue object.
  */
 function getExportableQueueObject(dequeued) {
-  return Object.assign(pick(dequeued, PICK_FROM_ENQUEUED), {
-    resolve: (...args) => invokeAllWithArguments(dequeued.resolvers, args),
-    reject: (...args) => invokeAllWithArguments(dequeued.rejectors, args),
-  });
+  return {
+    ...pick(dequeued, PICK_FROM_ENQUEUED),
+    resolve: invokerOfAllWithArguments(dequeued.resolvers),
+    reject: invokerOfAllWithArguments(dequeued.rejectors),
+  };
 }
 
 /**
@@ -133,8 +157,8 @@ function onQueueItemReduction(handleQueueReduction) {
     const drop = () => {
       dropped = true;
       return {
-        resolve: (...args) => invokeAllWithArguments(current.resolvers, args),
-        reject: (...args) => invokeAllWithArguments(current.rejectors, args),
+        resolve: invokerOfAllWithArguments(current.resolvers),
+        reject: invokerOfAllWithArguments(current.rejectors),
       };
     };
 
@@ -310,19 +334,29 @@ module.exports = class PromiseQueue {
    */
   constructor({
     lifo = false,
+    onQueueDrained,
+    onMethodEnqueued,
     maxConcurrency = 1,
     handleQueueReduction,
-    onQueueDrained,
+    onMethodDeprioritized,
   } = {}) {
-    this.id = qid++;
     this.queue = [];
     this.running = 0;
-    this.isDrained = false;
     this.lifo = Boolean(lifo);
+
+    this.isDrained = false;
     this.isPaused = false;
+
     this.handleQueueReduction = handleQueueReduction;
+    this.onMethodDeprioritized = onMethodDeprioritized;
+
     this.onQueueDrained = onQueueDrained;
+    this.onMethodEnqueued = onMethodEnqueued;
     this.setMaxConcurrency(maxConcurrency);
+
+    // An optimization to prevent sorting the queue on every enqueue
+    // until a priority has been set on a method.
+    this.prioritySortMode = false;
   }
 
   /**
@@ -341,18 +375,6 @@ module.exports = class PromiseQueue {
    */
   get push() {
     return this.enqueue;
-  }
-
-  /**
-   * Attaches a key to each `enqueued` return value so we can verify that users
-   * don't return another enqueued promise inside of another enqueued method.
-   * This would be a logical errors, since waiting for an item enqueued after
-   * yourself doesn't make much sense.
-   * @returns {string} The key attached to each `enqueue` method's returned promise.
-   * @memberof PromiseQueue
-   */
-  keyForEnqueuedPromise() {
-    return `__ENQUEUED_EXECUTION_PROMISE_${this.id}__`;
   }
 
   /**
@@ -400,6 +422,7 @@ module.exports = class PromiseQueue {
     if (!this.queue.length) {
       if (typeof this.onQueueDrained === 'function' && !this.isDrained) this.onQueueDrained();
       this.isDrained = true;
+      this.prioritySortMode = false;
       return;
     }
 
@@ -426,7 +449,7 @@ module.exports = class PromiseQueue {
     try {
       returned = method.call(context, ...args);
 
-      if (returned && returned[this.keyForEnqueuedPromise()]) {
+      if (returned && returned[IS_PROMISE_QUEUE_PROMISE]) {
         throw new Error(
           'Queue out of order execution: cannot resolve with something that ' +
           "won't be called until this function completes.",
@@ -447,8 +470,18 @@ module.exports = class PromiseQueue {
    * @returns {undefined}
    * @memberof PromiseQueue
    */
-  priortizeQueue() {
-    this.queue.sort(prioritySort);
+  prioritizeQueue() {
+    const deprioritized = [];
+    const sorter = this.lifo ? prioritySortLIFO : prioritySortFIFO;
+    this.queue.sort(sorter(deprioritized));
+
+    if (typeof this.onMethodDeprioritized === 'function') {
+      deprioritized.forEach((enqueued) => {
+        const prio = Number(this.onMethodDeprioritized(pick(enqueued, PICK_FROM_ENQUEUED))) || 0;
+        // eslint-disable-next-line no-param-reassign
+        enqueued.priority = prio;
+      });
+    }
   }
 
   /**
@@ -466,11 +499,13 @@ module.exports = class PromiseQueue {
    * Adds a method into the PromiseQueue for deferred execution.
    * @param {function} method The function to enqueue.
    * @param {object} options Method specific enqueueing options.
-   * @returns {PromiseQueue} The current PromiseQueue instance for chaining.
+   * @returns {Promise} Resolves once the passed in method is dequeued and executed to completion.
    * @memberof PromiseQueue
    */
-  enqueue(method, { args = [], priority = 0, context = this } = {}) {
-    const deferredExecutionPromise = new Promise((resolve, reject) => {
+  enqueue(method, options = {}) {
+    const enqueuedMethodPromise = new Promise((resolve, reject) => {
+      const { args = [], priority = 0, context = this } = options;
+
       if (typeof method !== 'function') {
         return reject(new TypeError(
           'PromiseQueue#enqueue expected a function for argument "method".',
@@ -494,10 +529,17 @@ module.exports = class PromiseQueue {
 
       this.isDrained = false;
 
+      // Toggles the queue from un-sorted mode to priority sort mode.
+      if (Number(priority) !== 0) this.prioritySortMode = true;
+
       // First prioritize the queue (sort it by priorities),
       // then allow the user the opportunity to reduce it.
-      this.priortizeQueue();
+      if (this.prioritySortMode) this.prioritizeQueue();
       this.reduceQueue();
+
+      if (typeof this.onMethodEnqueued === 'function') {
+        this.onMethodEnqueued(method, options);
+      }
 
       // Defer the execution of the tick until the next iteration of the event loop
       // This is important so we allow all synchronous "enqueues" occur before any
@@ -506,8 +548,8 @@ module.exports = class PromiseQueue {
       return undefined;
     });
 
-    deferredExecutionPromise[this.keyForEnqueuedPromise()] = true;
-    return deferredExecutionPromise;
+    enqueuedMethodPromise[IS_PROMISE_QUEUE_PROMISE] = true;
+    return enqueuedMethodPromise;
   }
 
   /**

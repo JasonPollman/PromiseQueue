@@ -152,12 +152,14 @@ Creates a new PromiseQueue instance.
 
 **Options:**
 
-| Property             | Type     | Default     | Description |
-| -------------------- | -------- | ----------- | ----------- |
-| lifo                 | boolean  | `false`     | If `true`, the queue will operate in LIFO mode (rather than the default FIFO mode). This makes the queue operate like a stack. |
-| maxConcurrency       | number   | `1`         | The maximum number of of enqueued items to process simultaneously. |
-| handleQueueReduction | function | `undefined` | An optional function that allows you to "combine" or drop queue items (see [Queue Reduction](#queue-reduction)) |
-| onQueueDrained       | function | `undefined` | An optional function that's called when the queue is depleted. Depletion means when all items in the queue have been processed and there's nothing left in the queue. This will be called every time the queue is drained (items are added and the queue depletes). |
+| Property              | Type      | Default     | Description |
+| --------------------- | --------- | ----------- | ----------- |
+| lifo                  | boolean   | `false`     | If `true`, the queue will operate in LIFO mode (rather than the default FIFO mode). This makes the queue operate like a stack. |
+| maxConcurrency        | number    | `1`         | The maximum number of of enqueued items to process simultaneously. |
+| handleQueueReduction  | function= | `undefined` | An optional function that allows you to "combine" or drop queue items (see [Queue Reduction](#queue-reduction)) |
+| onQueueDrained        | function= | `undefined` | An optional function that's called when the queue is depleted. Depletion means when all items in the queue have been processed and there's nothing left in the queue. This will be called every time the queue is drained (items are added and the queue depletes). |
+| onMethodEnqueued      | function= | `undefined` | If supplied, this function is called **every** time a method is enqueued with the method and its enqueue options |
+| onMethodDeprioritized | function= | `undefined` | If supplied, this function is called each time a method is "pushed" back in the queue due to prioritization. **Whatever value you return from this method become the new method's queue priority.** This provides the opportunity to prevent the method from being pushed back at each enqueue and never being called. |
 
 ### PromiseQueue#size => {number}
 Returns the number of enqueued items in the queue.
@@ -271,6 +273,35 @@ Higher values will move the enqueued item to the *front* of the queue.
 
 Priorities default to `0`, so if you don't need a priority queue, simply don't pass in any
 priority option values.
+
+When all priorities are `0`, the queue operates in "non-priority sorting mode", and the queue
+won't be sorted each time `enqueue` is called. This is much more efficient, so if you don't need
+priorities, don't use them.
+
+### Handling Priority "Deadlocks"
+It's possible that a low priority method that's been enqueued can be never called if a queue
+is frequently enqueueing high priority methods (on some interval, for example).
+
+For this reason, if you are utilizing priorities, you **should** pass in a `onMethodDeprioritized`
+method to handle this case.
+
+This method lets you adjust the priority of an enqueued item each time it's moved back in the queue.
+
+You can increment a low method's priority using this hook so that the enqueued method will eventually
+bubble up to the top of the queue and be executed with some knowledge of the maximum times the
+queue ticks before the method is guaranteed to run:
+
+```js
+function onMethodDeprioritized(enqueued) {
+  // Increase the priority of the method each time it's "deprioritized".
+  const priority = enqueued.priority;
+  return priority + 1;
+};
+
+const queue = new PromiseQueue({
+  onMethodDeprioritized,
+})
+```
 
 ## Queue Reduction
 ### @todo

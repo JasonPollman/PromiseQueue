@@ -659,6 +659,23 @@ describe('PromiseQueue', () => {
         });
       });
 
+      it('Should call `onMethodEnqueued` if it\'s a function', () => {
+        instance.onMethodEnqueued = (method, options) => {
+          expect(method).to.be.a('function');
+          expect(options).to.eql({});
+        };
+
+        const results = [];
+
+        return Promise.all([
+          instance.enqueue(() => results.push('a')),
+          instance.enqueue(() => results.push('b')),
+          instance.enqueue(() => results.push('c')),
+        ]).then(() => {
+          expect(results).to.eql(['a', 'b', 'c']);
+        });
+      });
+
       it('Should run items in the correct order (fifo mode, using push)', () => {
         const results = [];
 
@@ -792,6 +809,17 @@ describe('PromiseQueue', () => {
             "Queue out of order execution: cannot resolve with something that won't be called until this function completes.",
           )),
       );
+
+      it('Should throw if trying to wait on a future enqueued method (parallel queues)', () => {
+        const queueA = new PromiseQueue();
+        const queueB = new PromiseQueue();
+
+        return queueA.enqueue(() => queueB.enqueue(noop))
+          .then(() => { throw new Error('Expected test to throw'); })
+          .catch(e => expect(e.message).to.equal(
+            "Queue out of order execution: cannot resolve with something that won't be called until this function completes.",
+          ));
+      });
 
       it('Should run items in the correct order (lifo mode, nested)', () => {
         const queue = new PromiseQueue({ lifo: true });
@@ -1149,19 +1177,363 @@ describe('PromiseQueue', () => {
       instance.onQueueDrained = () => {
         try {
           expect(results).to.eql([
-            -10,
-            -10,
-            -10,
-            0,
-            0,
-            0,
-            10,
-            10,
-            10,
             100,
             100,
             100,
+            10,
+            10,
+            10,
+            0,
+            0,
+            0,
+            -10,
+            -10,
+            -10,
           ]);
+          done();
+        } catch (e) {
+          done(e);
+        }
+      };
+    });
+
+    it('Should prioritize methods (fifo, staggered)', (done) => {
+      const results = [];
+
+      const methodNeg50 = () => {
+        results.push(-50);
+      };
+
+      const method0 = () => {
+        instance.enqueue(methodNeg50, { priority: -50 });
+        results.push(0);
+      };
+
+      const method10 = () => {
+        instance.enqueue(methodNeg50, { priority: -50 });
+        results.push(10);
+      };
+
+      const method100 = () => {
+        instance.enqueue(methodNeg50, { priority: -50 });
+        results.push(100);
+      };
+
+      const methodNeg10 = () => {
+        instance.enqueue(methodNeg50, { priority: -50 });
+        results.push(-10);
+      };
+
+      instance.enqueue(method0, { priority: 0 });
+      instance.enqueue(methodNeg10, { priority: -10 });
+      instance.enqueue(method10, { priority: 10 });
+      instance.enqueue(method100, { priority: 100 });
+      instance.enqueue(method0, { priority: 0 });
+      instance.enqueue(methodNeg10, { priority: -10 });
+      instance.enqueue(method10, { priority: 10 });
+      instance.enqueue(method100, { priority: 100 });
+      instance.enqueue(method0, { priority: 0 });
+      instance.enqueue(methodNeg10, { priority: -10 });
+      instance.enqueue(method10, { priority: 10 });
+      instance.enqueue(method100, { priority: 100 });
+
+      instance.onQueueDrained = () => {
+        try {
+          expect(results).to.eql([
+            100,
+            100,
+            100,
+            10,
+            10,
+            10,
+            0,
+            0,
+            0,
+            -10,
+            -10,
+            -10,
+            -50,
+            -50,
+            -50,
+            -50,
+            -50,
+            -50,
+            -50,
+            -50,
+            -50,
+            -50,
+            -50,
+            -50,
+          ]);
+          done();
+        } catch (e) {
+          done(e);
+        }
+      };
+    });
+
+    it('Should all the user to "handle" deprioritization (1)', (done) => {
+      const results = [];
+
+      instance.onMethodDeprioritized = (a) => {
+        try {
+          expect(a).to.be.an('object');
+        } catch (e) {
+          done(e);
+        }
+      };
+
+      const prio0 = () => results.push(0);
+      const prio1 = () => results.push(1);
+      const prio2 = () => results.push(2);
+
+      instance.enqueue(prio0, { priority: 0 });
+      instance.enqueue(prio1, { priority: 1 });
+      instance.enqueue(prio2, { priority: 2 });
+
+      instance.onQueueDrained = () => {
+        try {
+          expect(results).to.eql([2, 1, 0]);
+          done();
+        } catch (e) {
+          done(e);
+        }
+      };
+    });
+
+    it('Should all the user to "handle" deprioritization (2)', (done) => {
+      const results = [];
+
+      const prio0 = () => results.push(0);
+      const prio5 = () => results.push(5);
+      const prio10 = () => results.push(10);
+
+      instance.onMethodDeprioritized = (a) => {
+        try {
+          expect(a).to.be.an('object');
+          return a.priority + 1;
+        } catch (e) {
+          return done(e);
+        }
+      };
+
+      instance.enqueue(prio0, { priority: 0 });
+      instance.enqueue(prio5, { priority: 5 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+
+      instance.onQueueDrained = () => {
+        try {
+          expect(results).to.eql([10, 10, 10, 10, 10, 5, 10, 0]);
+          done();
+        } catch (e) {
+          done(e);
+        }
+      };
+    });
+
+    it('Should all the user to "handle" deprioritization (3)', (done) => {
+      const results = [];
+
+      const prio0 = () => results.push(0);
+      const prio5 = () => results.push(5);
+      const prio10 = () => results.push(10);
+
+      instance.onMethodDeprioritized = (a) => {
+        try {
+          expect(a).to.be.an('object');
+          return a.priority + 1;
+        } catch (e) {
+          return done(e);
+        }
+      };
+
+      instance.enqueue(prio0, { priority: 0 });
+      instance.enqueue(prio5, { priority: 5 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+
+      instance.onQueueDrained = () => {
+        try {
+          expect(results).to.eql([10, 10, 10, 10, 10, 10, 5, 10, 10, 10, 0, 10, 10]);
+          done();
+        } catch (e) {
+          done(e);
+        }
+      };
+    });
+
+    it('Should all the user to "handle" deprioritization (4)', (done) => {
+      const results = [];
+
+      const prio0 = () => results.push(0);
+      const prio5 = () => results.push(5);
+      const prio10 = () => results.push(10);
+
+      instance.onMethodDeprioritized = (a) => {
+        try {
+          expect(a).to.be.an('object');
+          return a.priority + 1;
+        } catch (e) {
+          return done(e);
+        }
+      };
+
+      instance.enqueue(prio0, { priority: 0 });
+      instance.enqueue(prio5, { priority: 5 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+
+      instance.onQueueDrained = () => {
+        try {
+          expect(results).to.eql([10, 10, 10, 10, 10, 10, 5, 10, 10, 10, 0, 10, 10, 10]);
+          done();
+        } catch (e) {
+          done(e);
+        }
+      };
+    });
+
+    it('Should all the user to "handle" deprioritization (5)', (done) => {
+      const results = [];
+
+      const prio0 = () => results.push(0);
+      const prio5 = () => results.push(5);
+      const prio10 = () => results.push(10);
+
+      instance.onMethodDeprioritized = (a) => {
+        try {
+          expect(a).to.be.an('object');
+          return a.priority + 1;
+        } catch (e) {
+          return done(e);
+        }
+      };
+
+      instance.enqueue(prio0, { priority: 0 });
+      instance.enqueue(prio5, { priority: 5 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio0, { priority: 0 });
+      instance.enqueue(prio5, { priority: 5 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+
+      instance.onQueueDrained = () => {
+        try {
+          expect(results).to.eql([10, 10, 10, 10, 10, 10, 5, 10, 10, 10, 0, 10, 10, 5, 10, 0]);
+          done();
+        } catch (e) {
+          done(e);
+        }
+      };
+    });
+
+    it('Should all the user to "handle" deprioritization (lifo, 1)', (done) => {
+      instance.lifo = true;
+      const results = [];
+
+      const prio0 = () => results.push(0);
+      const prio5 = () => results.push(5);
+      const prio10 = () => results.push(10);
+
+      instance.onMethodDeprioritized = (a) => {
+        try {
+          expect(a).to.be.an('object');
+          return a.priority + 1;
+        } catch (e) {
+          return done(e);
+        }
+      };
+
+      instance.enqueue(prio0, { priority: 0 });
+      instance.enqueue(prio5, { priority: 5 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+
+      instance.onQueueDrained = () => {
+        try {
+          expect(results).to.eql([10, 10, 10, 10, 10, 10, 10, 5, 0]);
+          done();
+        } catch (e) {
+          done(e);
+        }
+      };
+    });
+
+    it('Should all the user to "handle" deprioritization (lifo, 2)', (done) => {
+      instance.lifo = true;
+      const results = [];
+
+      const prio0 = () => results.push(0);
+      const prio5 = () => results.push(5);
+      const prio10 = () => results.push(10);
+
+      instance.onMethodDeprioritized = (a) => {
+        try {
+          expect(a).to.be.an('object');
+          return a.priority + 1;
+        } catch (e) {
+          return done(e);
+        }
+      };
+
+      instance.enqueue(prio0, { priority: 0 });
+      instance.enqueue(prio5, { priority: 5 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio0, { priority: 0 });
+      instance.enqueue(prio5, { priority: 5 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+      instance.enqueue(prio10, { priority: 10 });
+
+      instance.onQueueDrained = () => {
+        try {
+          expect(results).to.eql([10, 10, 10, 10, 10, 10, 10, 5, 10, 10, 10, 10, 5, 0, 10, 0]);
           done();
         } catch (e) {
           done(e);

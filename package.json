@@ -1,6 +1,6 @@
 {
   "name": "@jasonpollman/promise-queue",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A queue, for promises.",
   "license": "ISC",
   "main": "index.js",

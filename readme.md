@@ -31,7 +31,7 @@ In the browser:
 </script>
 ```
 
-**`dist/PromiseQueue.min.js` exportes an UMD library**    
+**`dist/PromiseQueue.min.js` exports an UMD library**    
 So it's consumable by both AMD and CommonJS frameworks.    
 
 **`dist/PromiseQueue.js` is CommonJS**    

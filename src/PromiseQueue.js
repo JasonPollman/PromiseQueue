@@ -40,6 +40,10 @@ const NATIVES_PROTOTYPES = [
   Object.getPrototypeOf(Function),
 ];
 
+/**
+ * The set of native static properties we don't want to queueify.
+ * @type {Array<function>}
+ */
 const NATIVES = [
   Object,
   Array,

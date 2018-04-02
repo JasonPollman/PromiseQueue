@@ -31,13 +31,22 @@ const PICK_FROM_ENQUEUED = ['args', 'method', 'priority', 'context'];
  * `queueifyAll` on an object and walking it's prototype chain.
  * @type {Array<object>}
  */
-const NATIVE_PROTOTYPES = [
-  Object.prototype,
-  Array.prototype,
-  String.prototype,
-  Number.prototype,
-  Boolean.prototype,
-  Function.prototype,
+const NATIVES_PROTOTYPES = [
+  Object.getPrototypeOf(Object),
+  Object.getPrototypeOf(Array),
+  Object.getPrototypeOf(String),
+  Object.getPrototypeOf(Number),
+  Object.getPrototypeOf(Boolean),
+  Object.getPrototypeOf(Function),
+];
+
+const NATIVES = [
+  Object,
+  Array,
+  String,
+  Number,
+  Boolean,
+  Function,
 ];
 
 /**
@@ -205,7 +214,7 @@ function onQueueItemReduction(handleQueueReduction) {
  */
 function forEachOwnAndInheritedFunction(object, iteratee, handled = {}) {
   // Don't promisify native prototype properties.
-  if (!object || NATIVE_PROTOTYPES.indexOf(object) > -1) return;
+  if (!object || NATIVES_PROTOTYPES.indexOf(object) > -1) return;
   const visited = handled;
 
   // Iterate the object's own properties
@@ -219,14 +228,16 @@ function forEachOwnAndInheritedFunction(object, iteratee, handled = {}) {
   });
 
   // Iterate the object's constructor properties (static properties)
-  Object.getOwnPropertyNames(object.constructor).forEach((property) => {
-    if (visited[property]) return;
-    visited[property] = true;
+  if (NATIVES.indexOf(object.constructor) === -1) {
+    Object.getOwnPropertyNames(object.constructor).forEach((property) => {
+      if (visited[property]) return;
+      visited[property] = true;
 
-    const value = object.constructor[property];
-    if (typeof value !== 'function' || property === 'prototype') return;
-    iteratee(value, property);
-  });
+      const value = object.constructor[property];
+      if (typeof value !== 'function' || property === 'prototype') return;
+      iteratee(value, property);
+    });
+  }
 
   forEachOwnAndInheritedFunction(Object.getPrototypeOf(object), iteratee, visited);
 }

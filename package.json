@@ -22,7 +22,9 @@
   "scripts": {
     "test": "NODE_ENV=test mocha ./test",
     "test:cover": "NODE_ENV=test nyc mocha",
-    "compile": "NODE_ENV=production ./node_modules/.bin/babel ./src -d ./dist --copy-files --source-maps",
+    "compile:node": "NODE_ENV=production npx babel ./src/PromiseQueue.js -o ./dist/PromiseQueue.js",
+    "compile:browser": "NODE_ENV=browser npx babel ./src/PromiseQueue.js -o ./dist/PromiseQueue.min.js --source-maps",
+    "compile": "rm -rf ./dist && mkdir ./dist && npm run compile:node && npm run compile:browser",
     "prepublish": "npm run compile"
   },
   "devDependencies": {

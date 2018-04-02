@@ -25,12 +25,17 @@ npm install @jasonpollman/promise-queue --save
 
 In the browser:
 ```html
-<script src="dist/PromiseQueue.js"></script>
+<script src="dist/PromiseQueue.min.js"></script>
+<script>
+  var queue = new PromiseQueue({ /* options */ });
+</script>
 ```
 
-**The exported library is UMD**    
+**`dist/PromiseQueue.min.js` exportes an UMD library**    
 So it's consumable by both AMD and CommonJS frameworks.    
-*Examples shown are using the CommonJS format*
+
+**`dist/PromiseQueue.js` is CommonJS**    
+For node usage.
 
 ## Usage
 ```js

@@ -24,6 +24,27 @@ describe('PromiseQueue', () => {
 
       const queueified = PromiseQueue.queueify(method);
       expect(queueified).to.be.a('function');
+      expect(queueified.queue).to.be.an.instanceof(PromiseQueue);
+      expect(queueified.queue.maxConcurrency).to.equal(1);
+
+      const result = queueified('foo');
+      expect(result).to.be.an.instanceof(Promise);
+      return result.then(returned => expect(returned).to.equal('foo'));
+    });
+
+    it('Should "queueify" a method (passing queue options)', () => {
+      function method(input) {
+        expect(this).to.be.an.instanceof(PromiseQueue);
+        return input;
+      }
+
+      const queueified = PromiseQueue.queueify(method, {
+        maxConcurrency: 5,
+      });
+
+      expect(queueified).to.be.a('function');
+      expect(queueified.queue).to.be.an.instanceof(PromiseQueue);
+      expect(queueified.queue.maxConcurrency).to.equal(5);
 
       const result = queueified('foo');
       expect(result).to.be.an.instanceof(Promise);
@@ -38,6 +59,7 @@ describe('PromiseQueue', () => {
 
       const queueified = PromiseQueue.queueify(method, { context: 'context' });
       expect(queueified).to.be.a('function');
+      expect(queueified.queue).to.be.an.instanceof(PromiseQueue);
 
       const result = queueified('foo');
       expect(result).to.be.an.instanceof(Promise);

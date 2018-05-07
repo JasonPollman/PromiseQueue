@@ -265,11 +265,13 @@ module.exports = class PromiseQueue {
    * @memberof PromiseQueue
    * @static
    */
-  static queueify(method, {
-    queue = new PromiseQueue(),
-    context = queue,
-    priority = 0,
-  } = {}) {
+  static queueify(method, options = {}) {
+    const {
+      queue = new PromiseQueue(options),
+      context = queue,
+      priority = 0,
+    } = options;
+
     if (typeof method !== 'function') {
       throw new TypeError(
         'You must pass a function for parameter "method" to queueify.',
@@ -282,7 +284,10 @@ module.exports = class PromiseQueue {
       );
     }
 
-    return (...args) => queue.enqueue(method, { args, context, priority });
+    const queueified = (...args) => queue.enqueue(method, { args, context, priority });
+    queueified.queue = queue;
+
+    return queueified;
   }
 
   /**
@@ -305,13 +310,15 @@ module.exports = class PromiseQueue {
    * @memberof PromiseQueue
    * @static
    */
-  static queueifyAll(object, {
-    prefix = 'queued',
-    suffix = '',
-    priorities = {},
-    queue = new PromiseQueue(),
-    assignQueueAsProperty = 'queue',
-  } = {}) {
+  static queueifyAll(object, options = {}) {
+    const {
+      prefix = 'queued',
+      suffix = '',
+      priorities = {},
+      queue = new PromiseQueue(options),
+      assignQueueAsProperty = 'queue',
+    } = options;
+
     if (typeof object !== 'object' || !Object.isExtensible(object)) {
       throw new Error('Cannot queueify a non-object or non-extensible object.');
     }
